@@ -1,0 +1,115 @@
+body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding-top: 20px;
+        }
+
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        .controls {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .controls label, .controls select, .controls button {
+            padding: 8px;
+            font-size: 1em;
+        }
+
+        #board-container {
+            display: grid;
+            border: 2px solid #333;
+            background-color: #007bff;
+            margin: 0 auto;
+        }
+
+        .column-hover-area {
+            display: flex;
+            flex-direction: column-reverse;
+            cursor: pointer;
+        }
+
+        .column-hover-area:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .cell {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-sizing: border-box;
+        }
+
+        .cell .piece {
+            border-radius: 50%;
+            background-color: #fff;
+            border: 1px solid #ccc;
+        }
+
+        .cell .piece.player1 {
+            background-color: #ff4136;
+        }
+
+        .cell .piece.player2 {
+            background-color: #ffdc00;
+        }
+
+        #game-info {
+            margin: 15px 0;
+        }
+
+        #status-message {
+            font-size: 1.2em;
+            font-weight: bold;
+            min-height: 1.5em;
+        }
+
+        /* New styles for colored turn messages */
+        .your-turn {
+            color: #ff4136 !important;
+        }
+
+        .ai-turn {
+            color: #ff8c00 !important;
+        }
+
+        #game-stats {
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        #player-first-toggle {
+            background-color: #fff9e6;
+            color: #cc8800;
+            border: 2px solid #ffe066;
+            transition: all 0.3s ease;
+        }
+
+        #player-first-toggle.active {
+            background-color: #ffe6e6;
+            color: #cc0000;
+            border: 2px solid #ffb3b3;
+        }
+
+        #player-first-toggle:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }

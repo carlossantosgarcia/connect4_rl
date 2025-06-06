@@ -22,6 +22,17 @@ let humanStarts = false;
 
 const InferenceSession = ort.InferenceSession;
 
+// Helper function to update status message with appropriate styling
+function updateStatusMessage(message, isPlayerTurn = null) {
+    statusMessage.textContent = message;
+    statusMessage.className = '';
+    if (isPlayerTurn === true) {
+        statusMessage.classList.add('your-turn');
+    } else if (isPlayerTurn === false) {
+        statusMessage.classList.add('ai-turn');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     loadModelsDropdown();
     setupEventListeners();
@@ -42,7 +53,7 @@ function togglePlayerStart() {
     if (aiModelSession) {
         resetGame();
     } else {
-        statusMessage.textContent = humanStarts ? "Select a model. Player starts." : "Select a model. AI will start.";
+        updateStatusMessage(humanStarts ? "Select a model. Player starts." : "Select a model. AI will start.");
     }
 }
 
@@ -61,7 +72,7 @@ async function loadModelsDropdown() {
 
         if (!Array.isArray(models)) {
             console.error("models.json did not parse into an array. Parsed data:", models);
-            statusMessage.textContent = "Error: Model list is not in the correct format.";
+            updateStatusMessage("Error: Model list is not in the correct format.");
             modelSelect.innerHTML = '<option value="">-- Invalid Model List --</option>';
             return;
         }
@@ -70,7 +81,7 @@ async function loadModelsDropdown() {
 
         if (models.length === 0) {
             console.warn("models.json is empty. No models to load.");
-            statusMessage.textContent = "No AI models found in the list.";
+            updateStatusMessage("No AI models found in the list.");
             modelSelect.innerHTML = '<option value="">-- No Models Available --</option>';
             return;
         }
@@ -89,7 +100,7 @@ async function loadModelsDropdown() {
 
     } catch (error) {
         console.error("Failed to load or process models.json:", error);
-        statusMessage.textContent = "Error loading AI models list. Check browser console.";
+        updateStatusMessage("Error loading AI models list. Check browser console.");
         modelSelect.innerHTML = '<option value="">-- Error Loading Models --</option>';
     }
 }
@@ -99,7 +110,7 @@ async function onModelSelected() {
     if (!modelFile) {
         aiModelSession = null;
         currentModelFile = null;
-        statusMessage.textContent = "Select an AI model to play.";
+        updateStatusMessage("Select an AI model to play.");
         updateGameStats(null);
         gameActive = false;
         resetGame();
@@ -107,17 +118,17 @@ async function onModelSelected() {
     }
 
     currentModelFile = modelFile;
-    statusMessage.textContent = `Loading AI model: ${modelSelect.selectedOptions[0].text}...`;
+    updateStatusMessage(`Loading AI model: ${modelSelect.selectedOptions[0].text}...`);
     gameActive = false;
 
     try {
         aiModelSession = await InferenceSession.create(`models/${modelFile}`, { executionProviders: ['wasm'] });
-        statusMessage.textContent = `AI model loaded. ${humanStarts ? "Your turn." : "AI is thinking..."}`;
+        updateStatusMessage(`AI model loaded. ${humanStarts ? "Your turn." : "AI is thinking..."}`, humanStarts ? true : false);
         updateGameStats(currentModelFile);
         resetGame();
     } catch (error) {
         console.error("Failed to load ONNX model:", error);
-        statusMessage.textContent = "Error loading AI model. Try another.";
+        updateStatusMessage("Error loading AI model. Try another.");
         aiModelSession = null;
         currentModelFile = null;
         updateGameStats(null);
@@ -179,11 +190,11 @@ function resetGame() {
     renderBoard();
 
     if (!aiModelSession) {
-        statusMessage.textContent = humanStarts ? "Select a model. Player starts." : "Select a model. AI will start.";
+        updateStatusMessage(humanStarts ? "Select a model. Player starts." : "Select a model. AI will start.");
         return;
     }
     
-    statusMessage.textContent = humanStarts ? "Your turn (Player 1 - Red)." : "AI's turn (Player -1 - Yellow). Thinking...";
+    updateStatusMessage(humanStarts ? "Your turn" : "AI's turn. Thinking...", humanStarts ? true : false);
     updateGameStats(currentModelFile);
 
     if (currentPlayer === AI_PLAYER && gameActive) {
@@ -197,10 +208,10 @@ function handleColumnClick(col) {
     if (isValidAction(col)) {
         makeMove(col, HUMAN_PLAYER);
     } else {
-        statusMessage.textContent = "Invalid move. Column is full.";
+        updateStatusMessage("Invalid move. Column is full.");
         setTimeout(() => {
             if (gameActive && currentPlayer === HUMAN_PLAYER) {
-                 statusMessage.textContent = "Your turn (Player 1 - Red).";
+                updateStatusMessage("Your turn", true);
             }
         }, 1500);
     }
@@ -232,7 +243,7 @@ function makeMove(col, player) {
 
 function switchPlayer() {
     currentPlayer = (currentPlayer === HUMAN_PLAYER) ? AI_PLAYER : HUMAN_PLAYER;
-    statusMessage.textContent = (currentPlayer === HUMAN_PLAYER) ? "Your turn (Player 1 - Red)." : "AI's turn (Player -1 - Yellow). Thinking...";
+    updateStatusMessage((currentPlayer === HUMAN_PLAYER) ? "Your turn" : "AI's turn. Thinking...", currentPlayer === HUMAN_PLAYER);
     if (currentPlayer === AI_PLAYER && gameActive) {
         setTimeout(aiMove, 500);
     }
@@ -297,11 +308,11 @@ function isBoardFull() {
 function endGame(winner) {
     gameActive = false;
     if (winner === HUMAN_PLAYER) {
-        statusMessage.textContent = "Congratulations! You win!";
+        updateStatusMessage("Congratulations! You win!");
     } else if (winner === AI_PLAYER) {
-        statusMessage.textContent = "AI wins! Better luck next time.";
+        updateStatusMessage("AI wins! Better luck next time.");
     } else {
-        statusMessage.textContent = "It's a draw!";
+        updateStatusMessage("It's a draw!");
     }
     if (currentModelFile) {
         incrementGameCount(currentModelFile);
@@ -340,8 +351,8 @@ async function aiMove() {
         } else {
             console.warn("AI couldn't find a valid best action, choosing random legal move. Q-Values:", qValues, "Legal Actions:", legalActions, "Chosen Best:", bestAction);
             if (legalActions.length > 0) {
-                 const randomAction = legalActions[Math.floor(Math.random() * legalActions.length)];
-                 makeMove(randomAction, AI_PLAYER);
+                    const randomAction = legalActions[Math.floor(Math.random() * legalActions.length)];
+                    makeMove(randomAction, AI_PLAYER);
             } else {
                 console.error("AI has no legal moves, but game should have ended (draw).");
                 if (isBoardFull()) endGame(0);
@@ -350,7 +361,7 @@ async function aiMove() {
 
     } catch (error) {
         console.error("Error during AI inference:", error);
-        statusMessage.textContent = "AI error. Please try resetting. Choosing random move.";
+        updateStatusMessage("AI error. Please try resetting. Choosing random move.");
         if (legalActions.length > 0) {
             const randomAction = legalActions[Math.floor(Math.random() * legalActions.length)];
             makeMove(randomAction, AI_PLAYER);

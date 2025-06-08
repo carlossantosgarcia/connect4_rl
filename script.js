@@ -6,42 +6,46 @@ const AI_PLAYER = -1;
 const CELL_SIZE = 80;
 const PIECE_RADIUS_RATIO = 0.8;
 
+// DOM Elements
 const boardContainer = document.getElementById('board-container');
 const modelSelect = document.getElementById('model-select');
+const depthSlider = document.getElementById('depth-slider');
+const depthLabelDisplay = document.getElementById('depth-label-display');
+const depthControlContainer = document.getElementById('depth-control-container');
 const statusMessage = document.getElementById('status-message');
 const resetGameButton = document.getElementById('reset-game');
 const modelGamesPlayedSpan = document.getElementById('model-games-played');
 const playerFirstToggle = document.getElementById('player-first-toggle');
 
+// Game State
 let board = [];
 let currentPlayer;
 let gameActive = false;
-let aiModelSession = null;
-let currentModelFile = null;
 let humanStarts = false;
+
+// AI State
+let aiModelSession = null;
+let selectedAgentType = 'minimax';
+let currentModelIdentifier = '';
 
 const InferenceSession = ort.InferenceSession;
 
-// Helper function to update status message with appropriate styling
 function updateStatusMessage(message, isPlayerTurn = null) {
     statusMessage.textContent = message;
     statusMessage.className = '';
-    if (isPlayerTurn === true) {
-        statusMessage.classList.add('your-turn');
-    } else if (isPlayerTurn === false) {
-        statusMessage.classList.add('ai-turn');
-    }
+    if (isPlayerTurn === true) statusMessage.classList.add('your-turn');
+    else if (isPlayerTurn === false) statusMessage.classList.add('ai-turn');
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    initializeBoardDOM();
     loadModelsDropdown();
     setupEventListeners();
-    initializeBoardDOM();
-    resetGame();
 });
 
 function setupEventListeners() {
     modelSelect.addEventListener('change', onModelSelected);
+    depthSlider.addEventListener('input', onDepthChanged);
     resetGameButton.addEventListener('click', resetGame);
     playerFirstToggle.addEventListener('click', togglePlayerStart);
 }
@@ -50,89 +54,66 @@ function togglePlayerStart() {
     humanStarts = !humanStarts;
     playerFirstToggle.textContent = humanStarts ? "Player Starts" : "AI Starts";
     playerFirstToggle.classList.toggle('active', humanStarts);
-    if (aiModelSession) {
-        resetGame();
-    } else {
-        updateStatusMessage(humanStarts ? "Select a model. Player starts." : "Select a model. AI will start.");
-    }
+    resetGame();
 }
 
 async function loadModelsDropdown() {
+    modelSelect.innerHTML = '<option value="minimax">Minimax AI</option>';
     try {
-        console.log("Attempting to fetch models.json from: models/models.json");
         const response = await fetch('models/models.json');
-        console.log("Fetch response status for models.json:", response.status, response.statusText);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status} while fetching models.json. URL: ${response.url}`);
-        }
-        
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const models = await response.json();
-        console.log("Successfully parsed models.json:", models);
-
-        if (!Array.isArray(models)) {
-            console.error("models.json did not parse into an array. Parsed data:", models);
-            updateStatusMessage("Error: Model list is not in the correct format.");
-            modelSelect.innerHTML = '<option value="">-- Invalid Model List --</option>';
-            return;
-        }
-        
-        modelSelect.innerHTML = '<option value="">-- Select AI Model --</option>'; 
-
-        if (models.length === 0) {
-            console.warn("models.json is empty. No models to load.");
-            updateStatusMessage("No AI models found in the list.");
-            modelSelect.innerHTML = '<option value="">-- No Models Available --</option>';
-            return;
-        }
-
         models.forEach(model => {
-            if (model && typeof model.file === 'string' && typeof model.name === 'string') {
+            if (model && model.file && model.name) {
                 const option = document.createElement('option');
                 option.value = model.file;
                 option.textContent = model.name;
                 modelSelect.appendChild(option);
-            } else {
-                console.warn("Skipping invalid model entry in models.json:", model);
             }
         });
-        console.log("Model dropdown populated.");
-
     } catch (error) {
-        console.error("Failed to load or process models.json:", error);
-        updateStatusMessage("Error loading AI models list. Check browser console.");
-        modelSelect.innerHTML = '<option value="">-- Error Loading Models --</option>';
+        console.error("Failed to load models.json:", error);
+        modelSelect.innerHTML += '<option disabled>Error loading models</option>';
     }
+    onModelSelected();
 }
 
 async function onModelSelected() {
-    const modelFile = modelSelect.value;
-    if (!modelFile) {
-        aiModelSession = null;
-        currentModelFile = null;
-        updateStatusMessage("Select an AI model to play.");
-        updateGameStats(null);
-        gameActive = false;
-        resetGame();
-        return;
-    }
-
-    currentModelFile = modelFile;
-    updateStatusMessage(`Loading AI model: ${modelSelect.selectedOptions[0].text}...`);
+    const selectedValue = modelSelect.value;
     gameActive = false;
 
-    try {
-        aiModelSession = await InferenceSession.create(`models/${modelFile}`, { executionProviders: ['wasm'] });
-        updateStatusMessage(`AI model loaded. ${humanStarts ? "Your turn." : "AI is thinking..."}`, humanStarts ? true : false);
-        updateGameStats(currentModelFile);
-        resetGame();
-    } catch (error) {
-        console.error("Failed to load ONNX model:", error);
-        updateStatusMessage("Error loading AI model. Try another.");
+    if (selectedValue === 'minimax') {
+        selectedAgentType = 'minimax';
         aiModelSession = null;
-        currentModelFile = null;
-        updateGameStats(null);
-        gameActive = false;
+        depthControlContainer.style.display = 'flex';
+        currentModelIdentifier = `minimax-d${depthSlider.value}`;
+        updateStatusMessage(`Playing against Minimax. ${humanStarts ? "Your turn." : "AI is thinking..."}`, humanStarts);
+        resetGame();
+    } else {
+        selectedAgentType = 'onnx';
+        currentModelIdentifier = selectedValue;
+        depthControlContainer.style.display = 'none';
+        updateStatusMessage(`Loading model: ${modelSelect.selectedOptions[0].text}...`);
+        try {
+            aiModelSession = await InferenceSession.create(`models/${selectedValue}`, { executionProviders: ['wasm'] });
+            updateStatusMessage(`Model loaded. ${humanStarts ? "Your turn." : "AI is thinking..."}`, humanStarts);
+            resetGame();
+        } catch (error) {
+            console.error("Failed to load ONNX model:", error);
+            updateStatusMessage("Error loading AI model.");
+            aiModelSession = null;
+            selectedAgentType = null;
+            resetGame();
+        }
+    }
+    updateGameStats(currentModelIdentifier);
+}
+
+function onDepthChanged() {
+    depthLabelDisplay.textContent = `Depth: ${depthSlider.value}`;
+    if (selectedAgentType === 'minimax') {
+        currentModelIdentifier = `minimax-d${depthSlider.value}`;
+        updateGameStats(currentModelIdentifier);
         resetGame();
     }
 }
@@ -148,19 +129,16 @@ function initializeBoardDOM() {
         columnDiv.classList.add('column-hover-area');
         columnDiv.dataset.column = c;
         columnDiv.addEventListener('click', () => handleColumnClick(c));
-
         for (let r = 0; r < ROWS; r++) {
             const cellDiv = document.createElement('div');
             cellDiv.classList.add('cell');
             cellDiv.id = `cell-${r}-${c}`;
             cellDiv.style.width = `${CELL_SIZE}px`;
             cellDiv.style.height = `${CELL_SIZE}px`;
-
             const pieceDiv = document.createElement('div');
             pieceDiv.classList.add('piece');
             pieceDiv.style.width = `${CELL_SIZE * PIECE_RADIUS_RATIO}px`;
             pieceDiv.style.height = `${CELL_SIZE * PIECE_RADIUS_RATIO}px`;
-            
             cellDiv.appendChild(pieceDiv);
             columnDiv.appendChild(cellDiv);
         }
@@ -172,12 +150,9 @@ function renderBoard() {
     for (let r = 0; r < ROWS; r++) {
         for (let c = 0; c < COLUMNS; c++) {
             const pieceDiv = document.getElementById(`cell-${r}-${c}`).querySelector('.piece');
-            pieceDiv.classList.remove('player1', 'player2');
-            if (board[r][c] === HUMAN_PLAYER) {
-                pieceDiv.classList.add('player1');
-            } else if (board[r][c] === AI_PLAYER) {
-                pieceDiv.classList.add('player2');
-            }
+            pieceDiv.classList.remove('player1', 'player2', 'winning-piece'); // Remove winning class too
+            if (board[r][c] === HUMAN_PLAYER) pieceDiv.classList.add('player1');
+            else if (board[r][c] === AI_PLAYER) pieceDiv.classList.add('player2');
         }
     }
 }
@@ -185,17 +160,20 @@ function renderBoard() {
 function resetGame() {
     board = Array(ROWS).fill(null).map(() => Array(COLUMNS).fill(0));
     currentPlayer = humanStarts ? HUMAN_PLAYER : AI_PLAYER;
-    gameActive = aiModelSession ? true : false;
+    gameActive = !!selectedAgentType;
     
-    renderBoard();
+    // Remove any winning highlights from the previous game
+    document.querySelectorAll('.winning-piece').forEach(el => el.classList.remove('winning-piece'));
 
-    if (!aiModelSession) {
-        updateStatusMessage(humanStarts ? "Select a model. Player starts." : "Select a model. AI will start.");
+    renderBoard();
+    updateGameStats(currentModelIdentifier);
+    
+    if (!gameActive) {
+        updateStatusMessage("Select an AI to start.");
         return;
     }
     
-    updateStatusMessage(humanStarts ? "Your turn" : "AI's turn. Thinking...", humanStarts ? true : false);
-    updateGameStats(currentModelFile);
+    updateStatusMessage(humanStarts ? "Your turn" : "AI's turn. Thinking...", humanStarts);
 
     if (currentPlayer === AI_PLAYER && gameActive) {
         setTimeout(aiMove, 500);
@@ -203,18 +181,8 @@ function resetGame() {
 }
 
 function handleColumnClick(col) {
-    if (!gameActive || currentPlayer !== HUMAN_PLAYER || !aiModelSession) return;
-
-    if (isValidAction(col)) {
-        makeMove(col, HUMAN_PLAYER);
-    } else {
-        updateStatusMessage("Invalid move. Column is full.");
-        setTimeout(() => {
-            if (gameActive && currentPlayer === HUMAN_PLAYER) {
-                updateStatusMessage("Your turn", true);
-            }
-        }, 1500);
-    }
+    if (!gameActive || currentPlayer !== HUMAN_PLAYER) return;
+    if (isValidAction(col)) makeMove(col, HUMAN_PLAYER);
 }
 
 function makeMove(col, player) {
@@ -225,7 +193,9 @@ function makeMove(col, player) {
             board[r][col] = player;
             renderBoard();
 
-            if (checkWin(r, col, player)) {
+            const winResult = checkWin(board, player);
+            if (winResult.isWin) {
+                highlightWinningPieces(winResult.winningPieces);
                 endGame(player);
                 return;
             }
@@ -233,20 +203,16 @@ function makeMove(col, player) {
                 endGame(0);
                 return;
             }
-
             switchPlayer();
             return;
         }
     }
-    console.error("makeMove called on a full column. This indicates a logic error.", col);
 }
 
 function switchPlayer() {
     currentPlayer = (currentPlayer === HUMAN_PLAYER) ? AI_PLAYER : HUMAN_PLAYER;
     updateStatusMessage((currentPlayer === HUMAN_PLAYER) ? "Your turn" : "AI's turn. Thinking...", currentPlayer === HUMAN_PLAYER);
-    if (currentPlayer === AI_PLAYER && gameActive) {
-        setTimeout(aiMove, 500);
-    }
+    if (currentPlayer === AI_PLAYER && gameActive) setTimeout(aiMove, 100);
 }
 
 function isValidAction(col) {
@@ -256,49 +222,51 @@ function isValidAction(col) {
 function getLegalActions() {
     const legal = [];
     for (let c = 0; c < COLUMNS; c++) {
-        if (isValidAction(c)) {
-            legal.push(c);
-        }
+        if (isValidAction(c)) legal.push(c);
     }
     return legal;
 }
 
-function checkWin(r_played, c_played, player) {
-    const directions = [
-        { dr: 0, dc: 1 },
-        { dr: 1, dc: 0 },
-        { dr: 1, dc: 1 },
-        { dr: 1, dc: -1 }
-    ];
-
-    for (const { dr, dc } of directions) {
-        let count = 1;
-
-        for (let i = 1; i < CONNECT_N; i++) {
-            const r = r_played + i * dr;
-            const c = c_played + i * dc;
-            if (r >= 0 && r < ROWS && c >= 0 && c < COLUMNS && board[r][c] === player) {
-                count++;
-            } else {
-                break;
+function checkWin(currentBoard, player) {
+    // Check horizontal, vertical, and both diagonals
+    for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLUMNS; c++) {
+            if (currentBoard[r][c] === player) {
+                // Horizontal
+                if (c <= COLUMNS - CONNECT_N) {
+                    let line = [];
+                    for (let i = 0; i < CONNECT_N; i++) line.push({ r, c: c + i });
+                    if (line.every(p => currentBoard[p.r][p.c] === player)) return { isWin: true, winningPieces: line };
+                }
+                // Vertical
+                if (r <= ROWS - CONNECT_N) {
+                    let line = [];
+                    for (let i = 0; i < CONNECT_N; i++) line.push({ r: r + i, c });
+                    if (line.every(p => currentBoard[p.r][p.c] === player)) return { isWin: true, winningPieces: line };
+                }
+                // Positive Diagonal
+                if (r <= ROWS - CONNECT_N && c <= COLUMNS - CONNECT_N) {
+                    let line = [];
+                    for (let i = 0; i < CONNECT_N; i++) line.push({ r: r + i, c: c + i });
+                    if (line.every(p => currentBoard[p.r][p.c] === player)) return { isWin: true, winningPieces: line };
+                }
+                // Negative Diagonal
+                if (r >= CONNECT_N - 1 && c <= COLUMNS - CONNECT_N) {
+                    let line = [];
+                    for (let i = 0; i < CONNECT_N; i++) line.push({ r: r - i, c: c + i });
+                    if (line.every(p => currentBoard[p.r][p.c] === player)) return { isWin: true, winningPieces: line };
+                }
             }
-        }
-
-        for (let i = 1; i < CONNECT_N; i++) {
-            const r = r_played - i * dr;
-            const c = c_played - i * dc;
-            if (r >= 0 && r < ROWS && c >= 0 && c < COLUMNS && board[r][c] === player) {
-                count++;
-            } else {
-                break;
-            }
-        }
-
-        if (count >= CONNECT_N) {
-            return true;
         }
     }
-    return false;
+    return { isWin: false };
+}
+
+function highlightWinningPieces(pieces) {
+    for (const piece of pieces) {
+        const pieceDiv = document.getElementById(`cell-${piece.r}-${piece.c}`).querySelector('.piece');
+        pieceDiv.classList.add('winning-piece');
+    }
 }
 
 function isBoardFull() {
@@ -307,93 +275,66 @@ function isBoardFull() {
 
 function endGame(winner) {
     gameActive = false;
-    if (winner === HUMAN_PLAYER) {
-        updateStatusMessage("Congratulations! You win!");
-    } else if (winner === AI_PLAYER) {
-        updateStatusMessage("AI wins! Better luck next time.");
-    } else {
-        updateStatusMessage("It's a draw!");
-    }
-    if (currentModelFile) {
-        incrementGameCount(currentModelFile);
-    }
+    if (winner === HUMAN_PLAYER) updateStatusMessage("Congratulations! You win!");
+    else if (winner === AI_PLAYER) updateStatusMessage("AI wins! Better luck next time.");
+    else updateStatusMessage("It's a draw!");
+    if (currentModelIdentifier) incrementGameCount(currentModelIdentifier);
 }
 
 async function aiMove() {
-    if (!gameActive || !aiModelSession || currentPlayer !== AI_PLAYER) return;
+    if (!gameActive || currentPlayer !== AI_PLAYER) return;
 
+    let bestAction = -1;
     const legalActions = getLegalActions();
-    if (legalActions.length === 0) {
-        if (isBoardFull()) endGame(0);
-        return;
-    }
-
-    const boardForAI = board.map(row => row.map(cell => cell * AI_PLAYER)).flat();
-    const tensorInput = new ort.Tensor('float32', Float32Array.from(boardForAI), [1, 1, ROWS, COLUMNS]);
+    if (legalActions.length === 0) return;
 
     try {
-        const feeds = { 'input_board': tensorInput };
-        const results = await aiModelSession.run(feeds);
-        const qValues = results.q_values.data;
-        
-        let bestAction = -1;
-        let maxQ = -Infinity;
-
-        for (const action of legalActions) {
-            if (qValues[action] > maxQ) {
-                maxQ = qValues[action];
-                bestAction = action;
+        if (selectedAgentType === 'minimax') {
+            const depth = parseInt(depthSlider.value, 10);
+            bestAction = getMinimaxMove(board, depth);
+        } else if (selectedAgentType === 'onnx' && aiModelSession) {
+            const boardForAI = board.map(row => row.map(cell => cell * AI_PLAYER)).flat();
+            const tensorInput = new ort.Tensor('float32', Float32Array.from(boardForAI), [1, 1, ROWS, COLUMNS]);
+            const feeds = { 'input_board': tensorInput };
+            const results = await aiModelSession.run(feeds);
+            const qValues = results.q_values.data;
+            let maxQ = -Infinity;
+            for (const action of legalActions) {
+                if (qValues[action] > maxQ) {
+                    maxQ = qValues[action];
+                    bestAction = action;
+                }
             }
         }
-        
-        if (bestAction !== -1 && isValidAction(bestAction)) {
+        if (bestAction !== -1 && legalActions.includes(bestAction)) {
             makeMove(bestAction, AI_PLAYER);
         } else {
-            console.warn(
-                "AI couldn't find valid move. Using random. Q-Values:", 
-                qValues, 
-                "Legal:", 
-                legalActions, 
-                "Best:", 
-                bestAction
-            );
-            if (legalActions.length > 0) {
-                const randomAction = legalActions[Math.floor(Math.random() * legalActions.length)];
-                makeMove(randomAction, AI_PLAYER);
-            } else {
-                console.error("No legal moves, game should have ended (draw).");
-                if (isBoardFull()) endGame(0);
-            }
+            makeMove(legalActions[Math.floor(Math.random() * legalActions.length)], AI_PLAYER);
         }
-
     } catch (error) {
-        console.error("Error during AI inference:", error);
-        updateStatusMessage("AI error. Please try resetting. Choosing random move.");
-        if (legalActions.length > 0) {
-            const randomAction = legalActions[Math.floor(Math.random() * legalActions.length)];
-            makeMove(randomAction, AI_PLAYER);
-        }
+        console.error("Error during AI move:", error);
+        updateStatusMessage("AI error. Choosing random move.");
+        makeMove(legalActions[Math.floor(Math.random() * legalActions.length)], AI_PLAYER);
     }
 }
 
 function getGameCounts() {
-    const counts = localStorage.getItem('connect4AICounts');
-    return counts ? JSON.parse(counts) : {};
+    return JSON.parse(localStorage.getItem('connect4AICounts') || '{}');
 }
 
-function updateGameStats(modelFile) {
-    if (!modelFile) {
+function updateGameStats(modelId) {
+    if (!modelId) {
         modelGamesPlayedSpan.textContent = 'N/A';
         return;
     }
     const counts = getGameCounts();
-    modelGamesPlayedSpan.textContent = counts[modelFile] || 0;
+    modelGamesPlayedSpan.textContent = counts[modelId] || 0;
 }
 
-function incrementGameCount(modelFile) {
-    if (!modelFile) return;
+function incrementGameCount(modelId) {
+    if (!modelId) return;
     const counts = getGameCounts();
-    counts[modelFile] = (counts[modelFile] || 0) + 1;
+    counts[modelId] = (counts[modelId] || 0) + 1;
     localStorage.setItem('connect4AICounts', JSON.stringify(counts));
-    updateGameStats(modelFile);
+    updateGameStats(modelId);
 }

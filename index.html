@@ -8,15 +8,24 @@
 </head>
 <body>
     <div class="container">
-        <h1>Connect 4 vs AI</h1>
+        <h1>Connect 4</h1>
 
         <div class="controls">
-            <label for="model-select">Play against:</label>
-            <select id="model-select">
-                <option value="">-- Select AI Model --</option>
-            </select>
-            <button id="reset-game">Reset Game</button>
-            <button id="player-first-toggle">AI Starts</button>
+            <!-- First row of controls -->
+            <div class="top-controls">
+                <label for="model-select">Play against:</label>
+                <select id="model-select">
+                    <!-- Populated by JS -->
+                </select>
+                <button id="reset-game">Reset Game</button>
+                <button id="player-first-toggle">AI Starts</button>
+            </div>
+            
+            <!-- Minimax depth slider -->
+            <div id="depth-control-container">
+                <label id="depth-label-display" for="depth-slider">Depth: 4</label>
+                <input type="range" id="depth-slider" min="1" max="6" value="4" step="1">
+            </div>
         </div>
         
         <div id="game-info">
@@ -29,6 +38,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
-    <script src="script.js"></script>
+    <script src="minimax.js" defer></script>
+    <script src="script.js" defer></script>
 </body>
 </html>

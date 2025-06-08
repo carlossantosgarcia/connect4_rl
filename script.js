@@ -58,7 +58,7 @@ function togglePlayerStart() {
 }
 
 async function loadModelsDropdown() {
-    modelSelect.innerHTML = '<option value="minimax">Minimax AI</option>';
+    modelSelect.innerHTML = '<option value="minimax">Minimax</option>';
     try {
         const response = await fetch('models/models.json');
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);

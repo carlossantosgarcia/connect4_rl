@@ -349,12 +349,19 @@ async function aiMove() {
         if (bestAction !== -1 && isValidAction(bestAction)) {
             makeMove(bestAction, AI_PLAYER);
         } else {
-            console.warn("AI couldn't find a valid best action, choosing random legal move. Q-Values:", qValues, "Legal Actions:", legalActions, "Chosen Best:", bestAction);
+            console.warn(
+                "AI couldn't find valid move. Using random. Q-Values:", 
+                qValues, 
+                "Legal:", 
+                legalActions, 
+                "Best:", 
+                bestAction
+            );
             if (legalActions.length > 0) {
-                    const randomAction = legalActions[Math.floor(Math.random() * legalActions.length)];
-                    makeMove(randomAction, AI_PLAYER);
+                const randomAction = legalActions[Math.floor(Math.random() * legalActions.length)];
+                makeMove(randomAction, AI_PLAYER);
             } else {
-                console.error("AI has no legal moves, but game should have ended (draw).");
+                console.error("No legal moves, game should have ended (draw).");
                 if (isBoardFull()) endGame(0);
             }
         }
